@@ -73,13 +73,17 @@ cat ${GTF_PATH} | awk '{line=$0}; $3 == region {print line}' region="${REGION_NA
 # Subset exon number if specified
 if [ "$(head -n 1 ${OUT_DIR}/${REGION_NAME}.gtf | grep 'exon_number' | wc -l)" -gt 0 ]
 then
-    cat ${OUT_DIR}/${REGION_NAME}.gtf | awk '{line=$0}; $14 == exon_number {print line}' exon_number="\"${EXON}\";" > ${OUT_DIR}/${REGION_NAME}.tmp.gtf
-    mv -f ${OUT_DIR}/${REGION_NAME}.tmp.gtf ${OUT_DIR}/${REGION_NAME}.gtf
+    REGION_NAME_AUG1=${REGION_NAME}_exon1
+    cat ${OUT_DIR}/${REGION_NAME}.gtf | awk '{line=$0}; $14 == exon_number {print line}' exon_number="\"${EXON}\";" > ${OUT_DIR}/${REGION_NAME_AUG1}.tmp.gtf
+    rm ${OUT_DIR}/${REGION_NAME}.gtf
+    mv ${OUT_DIR}/${REGION_NAME_AUG1}.tmp.gtf ${OUT_DIR}/${REGION_NAME_AUG1}.gtf
+else
+    REGION_NAME_AUG1=${REGION_NAME}
 fi
 
 if [ "${UPSTREAM}" -gt 0 ] || [ "${DOWNSTREAM}" -gt 0 ]
 then
-    REGION_NAME_AUG=${REGION_NAME}_u${UPSTREAM}d${DOWNSTREAM}
+    REGION_NAME_AUG2=${REGION_NAME_AUG1}_u${UPSTREAM}d${DOWNSTREAM}
     CHROM_SIZES_PATH="$(dirname ${FASTA_PATH})/chrom.sizes"
     if [ ! -f "${CHROM_SIZES_PATH}" ]
     then
@@ -92,16 +96,17 @@ then
         cut -f 1,2 ${FASTA_PATH}.fai > ${CHROM_SIZES_PATH}
     fi
     # Include upstream/downstream basees in subset GTF file
-    bedtools slop -i ${OUT_DIR}/${REGION_NAME}.gtf -g ${CHROM_SIZES_PATH} -l ${UPSTREAM} -r ${DOWNSTREAM} -s > ${OUT_DIR}/${REGION_NAME_AUG}.gtf
-    rm ${OUT_DIR}/${REGION_NAME}.gtf
+    bedtools slop -i ${OUT_DIR}/${REGION_NAME_AUG1}.gtf -g ${CHROM_SIZES_PATH} -l ${UPSTREAM} -r ${DOWNSTREAM} -s > ${OUT_DIR}/${REGION_NAME_AUG2}.gtf
+    rm ${OUT_DIR}/${REGION_NAME_AUG1}.gtf
 else
-    REGION_NAME_AUG=${REGION_NAME}
+    REGION_NAME_AUG2=${REGION_NAME_AUG1}
 fi
 
 # Generate subset Fasta file
-bedtools getfasta -fi ${FASTA_PATH} -bed ${OUT_DIR}/${REGION_NAME_AUG}.gtf -fo ${OUT_DIR}/${REGION_NAME_AUG}.fa
+bedtools getfasta -fi ${FASTA_PATH} -bed ${OUT_DIR}/${REGION_NAME_AUG2}.gtf -fo ${OUT_DIR}/${REGION_NAME_AUG2}.fa
 
 # Generate subset tsv file
-cat ${OUT_DIR}/${REGION_NAME_AUG}.fa | paste -sd '\t\n' | tr -d '>' > ${OUT_DIR}/${REGION_NAME_AUG}.tmp.tsv
-cat ${OUT_DIR}/${REGION_NAME_AUG}.gtf | awk '{$1=$1}; {gsub(/[\";]/,"",$10); print $10}' | cut -d' ' -f10 | paste - ${OUT_DIR}/${REGION_NAME_AUG}.tmp.tsv > ${OUT_DIR}/${REGION_NAME_AUG}.tsv
-rm ${OUT_DIR}/${REGION_NAME_AUG}.tmp.tsv
+cat ${OUT_DIR}/${REGION_NAME_AUG2}.fa | paste -sd '\t\n' | tr -d '>' > ${OUT_DIR}/${REGION_NAME_AUG2}.tmp.tsv
+echo -e "Geneid\tInterval\tSequence" > ${OUT_DIR}/${REGION_NAME_AUG2}.tsv
+cat ${OUT_DIR}/${REGION_NAME_AUG2}.gtf | awk '{$1=$1}; {gsub(/[\";]/,"",$10); print $10}' | cut -d' ' -f10 | paste - ${OUT_DIR}/${REGION_NAME_AUG2}.tmp.tsv >> ${OUT_DIR}/${REGION_NAME_AUG2}.tsv
+rm ${OUT_DIR}/${REGION_NAME_AUG2}.tmp.tsv
