@@ -59,13 +59,14 @@ function_map = {'rpkm': rpkm, 'tpm': tpm}
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser(description='Normalize feature counts.')
 	parser.add_argument('counts_path', type=str, help='Path to a feature count file.')
-	parser.add_argument('output_path', type=str, default='normalized_counts.csv',
-	                    help='Path to normalized feature count output file.')
+	parser.add_argument('--out', dest='output_path', metavar='output_path', type=str,
+		                default='norm_counts.tsv',
+		                help='Path to normalized feature count output file (default \'norm_counts.tsv\'.)')
 	parser.add_argument('--norm-type', dest='norm_type', metavar='normalization_type',
 		                default=tpm, choices=function_map, type=str,
-	                    help='Normalization type for feature counts.')
+	                    help='Normalization type for feature counts (default: \'tpm\').')
 	parser.add_argument('--round', dest='decimals', metavar='decimals',
-		                type = int, default=3, help='Number of decimal places to round to.')
+		                type = int, default=3, help='Number of decimal places to round to (default: 3).')
 
 	args = parser.parse_args()
 
@@ -77,4 +78,4 @@ if __name__ == '__main__':
 	norm_counts = args.norm_type(counts.iloc[:, length_ind + 1:], counts.Length)
 	counts.iloc[:, length_ind + 1:] = norm_counts.round({x: args.decimals for x in norm_counts.columns})
 
-	counts.to_csv(args.output_path, index_label='Geneid')
+	counts.to_csv(args.output_path, index_label='Geneid', sep='\t')

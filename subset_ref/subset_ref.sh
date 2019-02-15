@@ -73,7 +73,7 @@ cat ${GTF_PATH} | awk '{line=$0}; $3 == region {print line}' region="${REGION_NA
 # Subset exon number if specified
 if [ "$(head -n 1 ${OUT_DIR}/${REGION_NAME}.gtf | grep 'exon_number' | wc -l)" -gt 0 ]
 then
-    REGION_NAME_AUG1=${REGION_NAME}_exon1
+    REGION_NAME_AUG1=${REGION_NAME}_e1
     cat ${OUT_DIR}/${REGION_NAME}.gtf | awk '{line=$0}; $14 == exon_number {print line}' exon_number="\"${EXON}\";" > ${OUT_DIR}/${REGION_NAME_AUG1}.tmp.gtf
     rm ${OUT_DIR}/${REGION_NAME}.gtf
     mv ${OUT_DIR}/${REGION_NAME_AUG1}.tmp.gtf ${OUT_DIR}/${REGION_NAME_AUG1}.gtf
@@ -106,7 +106,7 @@ fi
 bedtools getfasta -fi ${FASTA_PATH} -bed ${OUT_DIR}/${REGION_NAME_AUG2}.gtf -fo ${OUT_DIR}/${REGION_NAME_AUG2}.fa
 
 # Generate subset tsv file
-cat ${OUT_DIR}/${REGION_NAME_AUG2}.fa | paste -sd '\t\n' | tr -d '>' > ${OUT_DIR}/${REGION_NAME_AUG2}.tmp.tsv
-echo -e "Geneid\tInterval\tSequence" > ${OUT_DIR}/${REGION_NAME_AUG2}.tsv
-cat ${OUT_DIR}/${REGION_NAME_AUG2}.gtf | awk '{$1=$1}; {gsub(/[\";]/,"",$10); print $10}' | cut -d' ' -f10 | paste - ${OUT_DIR}/${REGION_NAME_AUG2}.tmp.tsv >> ${OUT_DIR}/${REGION_NAME_AUG2}.tsv
+cat ${OUT_DIR}/${REGION_NAME_AUG2}.fa | paste -sd '\t\n' | tr -d '>' | awk '{gsub(/[:-]/," ",$1)}; 1' > ${OUT_DIR}/${REGION_NAME_AUG2}.tmp.tsv
+echo -e "Geneid\tChr\tStart\tEnd\tStrand\tSeq" > ${OUT_DIR}/${REGION_NAME_AUG2}.tsv
+cat ${OUT_DIR}/${REGION_NAME_AUG2}.gtf | awk '{$1=$1}; {gsub(/[\";]/,"",$10)}; {print $10,$7}' | paste - ${OUT_DIR}/${REGION_NAME_AUG2}.tmp.tsv | awk '{strand=$2}; {for(i=2;i<5;i++) $i=$(i+1)}; {$5=strand}; {print}'  | tr ' ' '\t' >> ${OUT_DIR}/${REGION_NAME_AUG2}.tsv
 rm ${OUT_DIR}/${REGION_NAME_AUG2}.tmp.tsv
