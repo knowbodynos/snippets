@@ -6,15 +6,15 @@ import dask.dataframe as dd
 from dask.multiprocessing import get
 
 
-def kmerize(seq, k, stride=1, alphabet='AGCT', complement='TCGA', delim=' '):
+def kmerize(seq, k, stride=1, alphabet='ACGTNBDHU', complement='TGCANUHDB', delim=' '):
     """
     Convert a sequence to kmer tokens
 
     :param seq str: Sequence to convert
     :param k int: Size of each kmer
     :param stride int: Stride of size k window (*default: 1*)
-    :param alphabet str: Alphabet of kmers (*default: 'AGCT'*)
-    :param complement str: Complement of alphabet (*default: 'TCGA'*)
+    :param alphabet str: Alphabet of kmers (*default: 'ACGTNBDHU'*)
+    :param complement str: Complement of alphabet (*default: 'TGCANUHDB'*)
     :param delim str: Delimiter of kmer token words (*default: ' '*)
     """
     dictionary = str.maketrans(alphabet, complement)
@@ -27,15 +27,15 @@ def kmerize(seq, k, stride=1, alphabet='AGCT', complement='TCGA', delim=' '):
     return delim.join(tokens)
 
 
-def get_tokens(seqs, k, stride=1, alphabet='AGCT', complement='TCGA', delim=' ', chunksize=100):
+def get_tokens(seqs, k, stride=1, alphabet='ACGTNBDHU', complement='TGCANUHDB', delim=' ', chunksize=100):
     """
     Convert a corpus of sequences to kmer tokens
 
     :param seq str: Sequence to convert
     :param k int: Size of each kmer
     :param stride int: Stride of size k window (*default: 1*)
-    :param alphabet str: Alphabet of kmers (*default: 'AGCT'*)
-    :param complement str: Complement of alphabet (*default: 'TCGA'*)
+    :param alphabet str: Alphabet of kmers (*default: 'ACGTNBDHU'*)
+    :param complement str: Complement of alphabet (*default: 'TGCANUHDB'*)
     :param delim str: Delimiter of kmer token words (*default: ' '*)
     :param chunksize int: Size of chunks to partition data (*default: 100*)
     """
@@ -51,9 +51,9 @@ if __name__ == '__main__':
     parser.add_argument('k', type=int, help='Size of each kmer.')
     parser.add_argument('--stride', dest='stride', metavar='integer', type=int, default=1,
                         help='Stride of size k window.)')
-    parser.add_argument('--alphabet', dest='alphabet', metavar='string', type=str, default='AGCT',
+    parser.add_argument('--alphabet', dest='alphabet', metavar='string', type=str, default='ACGTNBDHU',
                         help='Alphabet of kmers.)')
-    parser.add_argument('--complement', dest='complement', metavar='string', type=str, default='TCGA',
+    parser.add_argument('--complement', dest='complement', metavar='string', type=str, default='TGCANUHDB',
                         help='Complement of alphabet.)')
     parser.add_argument('--delim', dest='delim', metavar='string', type=str, default=' ',
                         help='Delimiter of kmer token words.)')
