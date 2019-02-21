@@ -108,9 +108,8 @@ void joinFile(string chunkName, string fileOutput, string header) {
             // Build the filename
             fileName.clear();
             fileName.append(chunkName);
-            fileName.append(".corpus");
-
             fileName.append(to_string(counter));
+            fileName.append(".corpus");
 
             // Open chunk to read
             ifstream fileInput;
