@@ -107,6 +107,6 @@ bedtools getfasta -fi ${FASTA_PATH} -bed ${OUT_DIR}/${REGION_NAME_AUG2}.gtf -fo 
 
 # Generate subset tsv file
 cat ${OUT_DIR}/${REGION_NAME_AUG2}.fa | paste -sd '\t\n' | tr -d '>' | awk '{gsub(/[:-]/," ",$1)}; 1' > ${OUT_DIR}/${REGION_NAME_AUG2}.tmp.tsv
-echo -e "Geneid\tChr\tStart\tEnd\tStrand\tSeq" > ${OUT_DIR}/${REGION_NAME_AUG2}.tsv
-cat ${OUT_DIR}/${REGION_NAME_AUG2}.gtf | awk '{$1=$1}; {gsub(/[\";]/,"",$10)}; {print $10,$7}' | paste - ${OUT_DIR}/${REGION_NAME_AUG2}.tmp.tsv | awk '{strand=$2}; {for(i=2;i<5;i++) $i=$(i+1)}; {$5=strand}; {print}'  | tr ' ' '\t' >> ${OUT_DIR}/${REGION_NAME_AUG2}.tsv
+echo -e "Geneid\tChr\tStart\tEnd\tStrand\tLength\tSeq" > ${OUT_DIR}/${REGION_NAME_AUG2}.tsv
+cat ${OUT_DIR}/${REGION_NAME_AUG2}.gtf | awk '{$1=$1}; {gsub(/[\";]/,"",$10)}; {print $10,$7}' | paste - ${OUT_DIR}/${REGION_NAME_AUG2}.tmp.tsv | awk '{strand=$2}; {for(i=2;i<5;i++) $i=$(i+1)}; {$5=strand}; {$7=$6}; {$6=$4-$3+1}; {print}'  | tr ' ' '\t' >> ${OUT_DIR}/${REGION_NAME_AUG2}.tsv
 rm ${OUT_DIR}/${REGION_NAME_AUG2}.tmp.tsv
