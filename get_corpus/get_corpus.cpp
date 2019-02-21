@@ -78,7 +78,7 @@ void chunkFile(string fullFilePath, string chunkName, unsigned long chunkSize) {
         // Close input file stream.
         fileStream.close();
         if (!quiet_flag) {
-            cout << endl << "Chunking complete! '" << counter - 1 << "' files created." << endl;
+            cout << endl << "Chunking complete! " << counter - 1 << " files created." << endl;
         }
     } else {
         cerr << "Error: Unable to open file '" << fullFilePath << "' for reading." << endl;
