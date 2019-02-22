@@ -12,6 +12,8 @@
 #include <getopt.h>
 #include <libgen.h>
 #include <linux/limits.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 using namespace std;
 
@@ -86,34 +88,35 @@ void chunkFile(string fullFilePath, string chunkName, unsigned long chunkSize) {
 }
 
 
-// Finds chunks by "chunkName" and creates file specified in fileOutput
-void joinFile(string chunkName, string fileOutput, string header) {
-    string fileName;
+// Finds chunks by "chunkName" and creates file specified in outputFileName
+void joinFile(string chunkName, string outputFileName, string header) {
+    string inputFileName;
 
     // Create our output file
-    ofstream outputfile;
-    outputfile.open(fileOutput.c_str(), ios::out | ios::binary);
+    ofstream fileOutput;
+    fileOutput.open(outputFileName.c_str(), ios::out | ios::binary);
 
     // If successful, loop through chunks matching chunkName
-    if (outputfile.is_open()) {
+    if (fileOutput.is_open()) {
         bool filefound = true;
         int counter = 1;
         int fileSize = 0;
 
-        outputfile << header << endl;
+        fileOutput << header << endl;
 
         while (filefound) {
             filefound = false;
 
             // Build the filename
-            fileName.clear();
-            fileName.append(chunkName);
-            fileName.append(to_string(counter));
-            fileName.append(".corpus");
+            inputFileName.clear();
+            inputFileName.append(chunkName);
+            inputFileName.append(".");
+            inputFileName.append(to_string(counter));
+            inputFileName.append(".corpus");
 
             // Open chunk to read
             ifstream fileInput;
-            fileInput.open(fileName.c_str(), ios::in | ios::binary);
+            fileInput.open(inputFileName.c_str(), ios::in | ios::binary);
 
             // If chunk opened successfully, read it and write it to 
             // output file.
@@ -122,8 +125,8 @@ void joinFile(string chunkName, string fileOutput, string header) {
                 fileSize = getFileSize(&fileInput);
                 char *inputBuffer = new char[fileSize];
 
-                fileInput.read(inputBuffer,fileSize);
-                outputfile.write(inputBuffer,fileSize);
+                fileInput.read(inputBuffer, fileSize);
+                fileOutput.write(inputBuffer, fileSize);
                 delete(inputBuffer);
 
                 fileInput.close();
@@ -132,13 +135,14 @@ void joinFile(string chunkName, string fileOutput, string header) {
         }
 
         // Close output file.
-        outputfile.close();
+        fileOutput.close();
 
         if (!quiet_flag) {
-            cout << endl << "File '" << fileOutput << "' assembly complete!" << endl;
+            char resolved_path[PATH_MAX];
+            cout << endl << "File '" << realpath(&outputFileName[0], resolved_path) << "' assembly complete!" << endl;
         }
     } else {
-        cerr << "Error: Unable to open file '" << fileOutput << "'for writing." << endl;
+        cerr << "Error: Unable to open file '" << outputFileName << "' for writing." << endl;
     }
 
 }
@@ -372,7 +376,9 @@ int main(int argc, char **argv) {
     int k = stoi(argv[optind + 1]);
     int stride = stoi(argv[optind + 2]);
     // string chunkName = fullFilePath.substr(fullFilePath.find_last_of("/\\") + 1);
-    string chunkName = basename(&fullFilePath[0]);
+    string tmp_dir = "/tmp/get_corpus/";
+    string chunkName = tmp_dir;
+    chunkName.append(basename(&fullFilePath[0]));
     string fullChunkName;
     string fullTokenizedChunkName;
     string header;
@@ -396,6 +402,10 @@ int main(int argc, char **argv) {
     }
 
     int chunkSize = ceil((float)lines / threads);
+
+    if (mkdir(tmp_dir.c_str(), 0777) && (errno != EEXIST)) {
+        cerr << "Error: Unable to create directory '" << tmp_dir << "'.";
+    }
 
     chunkFile(fullFilePath, chunkName, chunkSize);
 
@@ -439,5 +449,9 @@ int main(int argc, char **argv) {
         if (remove(fullTokenizedChunkName.c_str()) != 0) {
             cerr << "Error: Could not remove intermediate file '" << fullTokenizedChunkName << "'.";
         }
+    }
+
+    if (rmdir(tmp_dir.c_str())) {
+        cerr << "Error: Unable to remove directory '" << tmp_dir << "'.";
     }
 }
