@@ -17,7 +17,10 @@
 
 using namespace std;
 
-static int quiet_flag, rcomp_flag;
+static int build_index_flag = 0;
+static int header_flag = 1;
+static int verbose_flag = 1;
+static int rcomp_flag = 1;
 static unsigned int MAX_THREADS = thread::hardware_concurrency();
 
 
@@ -42,9 +45,12 @@ void chunkFile(string fullFilePath, string chunkName, unsigned long chunkSize) {
 
         string fullChunkName;
         string line;
-        string header;
 
-        getline(fileStream, header);
+        if (header_flag) {
+            string header;
+            getline(fileStream, header);
+        }
+
         getline(fileStream, line);
 
         // Keep reading until end of file
@@ -79,8 +85,8 @@ void chunkFile(string fullFilePath, string chunkName, unsigned long chunkSize) {
 
         // Close input file stream.
         fileStream.close();
-        if (!quiet_flag) {
-            cout << endl << "Chunking complete! " << counter - 1 << " files created." << endl;
+        if (verbose_flag) {
+            cout << "-> Chunking complete! " << counter - 1 << " files created." << endl;
         }
     } else {
         cerr << "Error: Unable to open file '" << fullFilePath << "' for reading." << endl;
@@ -89,7 +95,7 @@ void chunkFile(string fullFilePath, string chunkName, unsigned long chunkSize) {
 
 
 // Finds chunks by "chunkName" and creates file specified in outputFileName
-void joinFile(string chunkName, string outputFileName, string header) {
+void joinFile(string chunkName, string outputFileName, string header, int column, char delim, string ext="") {
     string inputFileName;
 
     // Create our output file
@@ -102,7 +108,21 @@ void joinFile(string chunkName, string outputFileName, string header) {
         int counter = 1;
         int fileSize = 0;
 
-        fileOutput << header << endl;
+        if (header_flag) {
+            istringstream iss(header);
+            string field;
+            for (int i=0;i<column;i++) {
+                getline(iss, field, delim);
+                fileOutput << field << delim;
+            }
+            getline(iss, field, delim);
+            fileOutput << "Tokens";
+            while (!iss.eof()) {
+                getline(iss, field, delim);
+                fileOutput << delim << field;
+            }
+            fileOutput << endl;
+        }
 
         while (filefound) {
             filefound = false;
@@ -112,8 +132,10 @@ void joinFile(string chunkName, string outputFileName, string header) {
             inputFileName.append(chunkName);
             inputFileName.append(".");
             inputFileName.append(to_string(counter));
-            inputFileName.append(".corpus");
-
+            if (ext != "") {
+                inputFileName.append(".");
+                inputFileName.append(ext);
+            }
             // Open chunk to read
             ifstream fileInput;
             fileInput.open(inputFileName.c_str(), ios::in | ios::binary);
@@ -137,19 +159,17 @@ void joinFile(string chunkName, string outputFileName, string header) {
         // Close output file.
         fileOutput.close();
 
-        if (!quiet_flag) {
+        if (verbose_flag) {
             char resolved_path[PATH_MAX];
-            cout << endl << "File '" << realpath(&outputFileName[0], resolved_path) << "' assembly complete!" << endl;
+            cout << "-> Joining complete! Corpus saved to '" << realpath(&outputFileName[0], resolved_path) << "'." << endl;
         }
     } else {
         cerr << "Error: Unable to open file '" << outputFileName << "' for writing." << endl;
     }
-
 }
 
 
 string translate(string token, string alphabet, string complement) {
-    transform(token.begin(), token.end(), token.begin(), ::toupper);
     string origToken = token;
     for (int i=0;i<alphabet.length();i++) {
         size_t pos = origToken.find(alphabet[i], 0);
@@ -168,32 +188,35 @@ string translate(string token, string alphabet, string complement) {
 }
 
 
-string tokenizeSeq(string seq, map<string,string> &rev_comp, int k, int stride, string alphabet, string complement, string delim) {
+string tokenizeSeq(string seq, map<string,string> &rev_comp, int k, int stride, string alphabet, string complement, char sep) {
+    transform(seq.begin(), seq.end(), seq.begin(), ::toupper);
     string origSeq = seq;
     string kmer = seq.substr(0, k);
     string tokens = translate(kmer, alphabet, complement);
     for (int i=stride;i<seq.length();i+=stride) {
         string kmer = seq.substr(i, k);
-        string token;
-        if (rcomp_flag) {
-            if (rev_comp.find(kmer) == rev_comp.end()) {
-                token = translate(kmer, alphabet, complement);
-                rev_comp[kmer] = token;
+        if (kmer.length() == k) {
+            string token;
+            if (rcomp_flag) {
+                if (rev_comp.find(kmer) == rev_comp.end()) {
+                    token = translate(kmer, alphabet, complement);
+                    rev_comp[kmer] = token;
+                } else {
+                    token = rev_comp[kmer];
+                }
             } else {
-                token = rev_comp[kmer];
+                token = kmer;
             }
-        } else {
-            token = kmer;
+            tokens += sep;
+            tokens.append(token);
         }
-        tokens.append(delim);
-        tokens.append(token);
     }
     return tokens;
 }
 
 
 // Tokenizes a sequence tsv file.
-void tokenizeFile(string fullFilePath, int k, int stride, string alphabet, string complement, string delim) {
+void tokenizeFile(string fullFilePath, int k, int stride, string alphabet, string complement, int column, char delim, char sep) {
     map<string,string> rev_comp;
     ifstream fileStream;
     fileStream.open(fullFilePath.c_str(), ios::in | ios::binary);
@@ -207,19 +230,17 @@ void tokenizeFile(string fullFilePath, int k, int stride, string alphabet, strin
         ofstream output;
         output.open(outFilePath.c_str(), ios::out | ios::trunc | ios::binary);
         if (output.is_open()) {
-
             string line;
             string field;
-
             // Keep reading until end of file
             while (getline(fileStream, line)) {
                 istringstream iss(line);
-                for (int i=0;i<6;i++) {
-                    getline(iss, field, '\t');
-                    output << field << '\t';
+                for (int i=0;i<column;i++) {
+                    getline(iss, field, delim);
+                    output << field << delim;
                 }
-                getline(iss, field, '\t');
-                output << tokenizeSeq(field, rev_comp, k, stride, alphabet, complement, delim) << endl;
+                getline(iss, field, delim);
+                output << tokenizeSeq(field, rev_comp, k, stride, alphabet, complement, sep) << endl;
             }
             output.close();
         } else {
@@ -236,74 +257,340 @@ void tokenizeFile(string fullFilePath, int k, int stride, string alphabet, strin
 
 class fileTokenizer {
     private:
-        string alphabet, complement, delim;
-        int k, stride;
+        string alphabet, complement;
+        char delim, sep;
+        int k, stride, column;
     public:
-        fileTokenizer(int k1, int stride1, string alphabet1, string complement1, string delim1) {
+        fileTokenizer(int k1, int stride1, string alphabet1, string complement1, int column1, char delim1, char sep1) {
             k = k1;
             stride = stride1;
             alphabet = alphabet1;
             complement = complement1;
+            column = column1;
             delim = delim1;
+            sep = sep1;
         }
         void operator()(string fullFilePath) { 
-            tokenizeFile(fullFilePath, k, stride, alphabet, complement, delim);
+            tokenizeFile(fullFilePath, k, stride, alphabet, complement, column, delim, sep);
         }
 };
 
 
-void usage() {
-    const char *text = "usage: get_corpus [-acdtoh] [--verbose] [--rcomp] ... [Sequence Corpus File] [kmer size] [stride length]\n"
+// Populate token frequencies from an input corpus.
+void popFreqs(map<string,int> &freq, string fullFilePath, int column, char delim, char sep) {
+    ifstream fileStream;
+    fileStream.open(fullFilePath.c_str(), ios::in | ios::binary);
+
+    // File open a success
+    if (fileStream.is_open()) {
+        string line;
+        string field;
+        // Keep reading until end of file
+        while (getline(fileStream, line)) {
+            istringstream iss1(line);
+            for (int i=0;i<column;i++) {
+                getline(iss1, field, delim);
+            }
+            getline(iss1, field, delim);
+            string token;
+            istringstream iss2(field);
+            while (getline(iss2, token, sep)) {
+                if (freq.find(token) == freq.end()) {
+                    freq[token] = 1;
+                } else {
+                    freq[token]++;
+                }
+            }
+        }
+        fileStream.close();
+    } else {
+        cerr << "Error: Unable to open file '" << fullFilePath << "' for reading." << endl;
+    }
+}
+
+
+class freqPopulator {
+    private:
+        int column;
+        char delim, sep;
+    public:
+        freqPopulator(int column1, char delim1, char sep1) {
+            column = column1;
+            delim = delim1;
+            sep = sep1;
+        }
+        void operator()(map<string,int> &freq, string fullFilePath) { 
+            popFreqs(freq, fullFilePath, column, delim, sep);
+        }
+};
+
+
+// Indexes the tokens in a corpus tsv file.
+map<string,int> buildIndex(string fullIndexPath, map<string, int> freq, char delim) {
+    vector<pair<string, int>> pairs;
+    map<string,int> index;
+    for (auto itr = freq.begin(); itr != freq.end(); ++itr)
+        pairs.push_back(*itr);
+
+    sort(pairs.begin(), pairs.end(), [](pair<string, int> a, pair<string, int> b) {
+        return a.second > b.second;
+    });
+
+    // Open new file name for output
+    ofstream output;
+    output.open(fullIndexPath.c_str(), ios::out | ios::trunc | ios::binary);
+    if (output.is_open()) {
+        output << "Token" << delim << "Counts" << endl; 
+        int i = 1;
+        for (auto itr = pairs.begin(); itr != pairs.end(); ++itr) {
+            index[itr->first] = i;
+            output << itr->first << "\t" << itr->second << endl;
+            i++;
+        }
+        output.close();
+    } else {
+        cerr << "Error: Unable to open file '" << fullIndexPath << "' for writing." << endl;
+    }
+    if (verbose_flag) {
+
+        char resolved_path[PATH_MAX];
+        cout << "-> Building index complete! Indexes saved to '" << realpath(&fullIndexPath[0], resolved_path) << "'." << endl;
+    }
+    return index;
+}
+
+
+string indexTokens(string tokens, map<string,int> index, char sep) {
+    string token;
+    istringstream iss(tokens);
+    getline(iss, token, sep);
+    string indexedTokens = to_string(index[token]);
+    while(getline(iss, token, sep)) {
+        indexedTokens += sep;
+        indexedTokens.append(to_string(index[token]));
+    }
+    return indexedTokens;
+}
+
+
+void indexFile(string fullFilePath, map<string,int> index, int column, char delim, char sep) {
+    ifstream fileStream;
+    fileStream.open(fullFilePath.c_str(), ios::in | ios::binary);
+    // File open a success
+    if (fileStream.is_open()) {
+        // Open new file name for output
+        string outFilePath = fullFilePath;
+        outFilePath.append(".index");
+        ofstream output;
+        output.open(outFilePath.c_str(), ios::out | ios::trunc | ios::binary);
+        if (output.is_open()) {
+            string line;
+            string field;
+            // Keep reading until end of file
+            while (getline(fileStream, line)) {
+                istringstream iss(line);
+                for (int i=0;i<column;i++) {
+                    getline(iss, field, delim);
+                    output << field << delim;
+                }
+                getline(iss, field, delim);
+                output << indexTokens(field, index, sep) << endl;
+            }
+            output.close();
+        } else {
+            cerr << "Error: Unable to open file '" << outFilePath << "' for writing." << endl;
+        }
+        fileStream.close();
+    } else {
+        cerr << "Error: Unable to open file '" << fullFilePath << "' for reading." << endl;
+    }
+}
+
+
+class fileIndexer {
+    private:
+        map<string, int> index;
+        int column;
+        char delim, sep;
+    public:
+        fileIndexer(map<string, int> index1, int column1, char delim1, char sep1) {
+            index = index1;
+            column = column1;
+            delim = delim1;
+            sep = sep1;
+        }
+        void operator()(string fullFilePath) {
+            indexFile(fullFilePath, index, column, delim, sep);
+        }
+};
+
+
+map<string, int> readIndex(string indexFile, char delim) {
+    map<string, int> index;
+    ifstream fileStream;
+    fileStream.open(indexFile.c_str(), ios::in | ios::binary);
+    // File open a success
+    if (fileStream.is_open()) {
+        string line;
+        getline(fileStream, line);
+        int i = 1;
+        while (getline(fileStream, line)) {
+            istringstream iss(line);
+            string token;
+            string counts;
+            getline(iss, token, delim);
+            getline(iss, counts, delim);
+            index[token] = i;
+            i++;
+        }
+        fileStream.close();
+    }
+    return index;
+}
+
+
+template <class T>
+void doThreading(T func, string chunkName, int threads, string msg, string ext="") {
+    string fullChunkName;
+    vector<thread> threadList;
+    for (int i=0;i<threads;i++) {
+        fullChunkName.clear();
+        fullChunkName.append(chunkName);
+        fullChunkName.append(".");
+        fullChunkName.append(to_string(i + 1));
+        if (ext != "") {
+            fullChunkName.append(".");
+            fullChunkName.append(ext);
+        }
+        // cout << fullChunkName << endl;
+        threadList.push_back(thread(func, fullChunkName));
+        // threadList.push_back(thread(tokenizeFile, fullChunkName, 5, 1, "ACGTNBDHU", "TGCANUHDB", " "));
+    }
+    for (auto& th : threadList) {
+        th.join();
+    }
+    if (verbose_flag) {
+        cout << "-> " << msg << endl;
+    }
+}
+
+
+template <class T>
+void doThreading(T func, vector<map<string,int>> &freqs, string chunkName, int threads, string msg, string ext="") {
+    string fullChunkName;
+    vector<thread> threadList;
+    for (int i=0;i<threads;i++) {
+        fullChunkName.clear();
+        fullChunkName.append(chunkName);
+        fullChunkName.append(".");
+        fullChunkName.append(to_string(i + 1));
+        if (ext != "") {
+            fullChunkName.append(".");
+            fullChunkName.append(ext);
+        }
+        // cout << fullChunkName << endl;
+        threadList.push_back(thread(func, ref(freqs[i]), fullChunkName));
+        // threadList.push_back(thread(tokenizeFile, fullChunkName, 5, 1, "ACGTNBDHU", "TGCANUHDB", " "));
+    }
+    for (auto& th : threadList) {
+        th.join();
+    }
+    if (verbose_flag) {
+        cout << "-> " << msg << endl;
+    }
+}
+
+
+void removeTmpfiles(string chunkName, int threads, string ext="") {
+    string fullChunkName;
+    for (int i=0;i<threads;i++) {
+        fullChunkName.clear();
+        fullChunkName.append(chunkName);
+        fullChunkName.append(".");
+        fullChunkName.append(to_string(i + 1));
+        if (ext != "") {
+            fullChunkName.append(".");
+            fullChunkName.append(ext);
+        }
+        if (remove(fullChunkName.c_str()) != 0) {
+            cerr << "Error: Could not remove intermediate file '" << fullChunkName << "'.";
+        }
+    }
+}
+
+
+void usage(int status) {
+    const char *text = "usage: get_corpus [-acdhostz] [--no-header] [--quiet] [--no-rcomp] ... [Sequence Corpus File] [kmer size] [stride length]\n"
     "\n"
     "       Tokenize sequence corpus.\n"
     "\n"
     "       Options:\n"
-    "           -a    Sequence alphabet.\n"
-    "           -c    Complement alphabet.\n"
-    "           -d    Kmer token delimiter.\n"
-    "           -t    Number of threads to run on.\n"
-    "           -o    Output file path.\n"
-    "           -h    Display this help and exit.\n\n";
+    "           --alphabet, -a      Sequence alphabet.\n"
+    "           --col, -c           Complement alphabet.\n"
+    "           --delim, -d         Input table delimitor.\n"
+    "           --help, -h          Display this help and exit.\n"
+    "           --index, -i         Index file path.\n"
+    "           --out, -o           Output file path.\n"
+    "           --sep, -s           Kmer token seperator.\n"
+    "           --threads, -t       Number of threads to run on.\n"
+    "           --complement, -z    Complement alphabet.\n"
+    "\n"
+    "           --build-index       Build new kmer token index from input sequences.\n"
+    "           --no-header         Input file has no header.\n"
+    "           --quiet             Quiet mode.\n"
+    "           --no-rcomp          Do not treat kmers and their reverse complements the same\n"
+    "                               (otherwise, kmers are represented as max(kmer, rev_comp)).\n\n";
+    
+    
     cout << text;
-    exit(1);
+    exit(status);
 }
 
 
 int main(int argc, char **argv) {
-    string alphabet = "ACGTNBDHU";
-    string complement = "TGCANUHDB";
-    string delim = " ";
+    string alphabet = "ACGTNBDHVRYKM";
+    string complement = "TGCANVHDBYRMK";
+    char sep = ' ';
+    int column = 6;
+    char delim = '\t';
     int threads = MAX_THREADS;
     string outFile = "corpus.tsv";
-    int c;
+    string indexFile = "";
+    int opt;
     while (1) {
         static struct option long_options[] = {
             /* These options set a flag. */
-            {"quiet", no_argument, &quiet_flag, 1},
+            {"build-index", no_argument, &build_index_flag, 1},
+            {"no-header", no_argument, &header_flag, 0},
+            {"quiet", no_argument, &verbose_flag, 0},
             // Match rcomp as well
-            {"rcomp", no_argument, &rcomp_flag, 1},
+            {"no-rcomp", no_argument, &rcomp_flag, 0},
             /* These options don’t set a flag.
             We distinguish them by their indices. */
             {"alphabet", required_argument, 0, 'a'},
-            {"complement", required_argument, 0, 'c'},
+            
+            {"col", required_argument, 0, 'c'},
             {"delim", required_argument, 0, 'd'},
-            {"threads", required_argument, 0, 't'},
-            {"out", required_argument, 0, 'o'},
             {"help", no_argument, 0, 'h'},
+            {"index", no_argument, 0, 'i'},
+            {"out", required_argument, 0, 'o'},
+            {"sep", required_argument, 0, 's'},
+            {"threads", required_argument, 0, 't'},
+            {"complement", required_argument, 0, 'z'},
             {0, 0, 0, 0}
         };
         /* getopt_long stores the option index here. */
         int option_index = 0;
 
-        c = getopt_long(argc, argv, "a:c:d:t:o:h",
-                       long_options, &option_index);
+        opt = getopt_long(argc, argv, "a:c:d:hi:o:s:t:z:",
+                          long_options, &option_index);
 
         /* Detect the end of the options. */
-        if (c == -1) {
+        if (opt == -1) {
             break;
         }
 
-        switch (c) {
+        switch (opt) {
             case 0:
                 /* If this option set a flag, do nothing else now. */
                 if (long_options[option_index].flag != 0) {
@@ -320,23 +607,51 @@ int main(int argc, char **argv) {
                 if (optarg) {
                     alphabet = optarg;
                 } else {
-                    usage();
+                    usage(1);
                 }
                 break;
 
             case 'c':
                 if (optarg) {
-                    complement = optarg;
+                    column = stoi(optarg);
                 } else {
-                    usage();
+                    usage(1);
                 }
                 break;
 
             case 'd':
-                if (optarg) {
-                    delim = optarg;
+                if (optarg && optarg[0]) {
+                    delim = optarg[0];
                 } else {
-                    usage();
+                    usage(1);
+                }
+                break;
+
+            case 'h':
+                usage(0);
+                break;
+
+            case 'i':
+                if (optarg) {
+                    indexFile = optarg;
+                } else {
+                    usage(1);
+                }
+                break;
+
+            case 'o':
+                if (optarg) {
+                    outFile = optarg;
+                } else {
+                    usage(1);
+                }
+                break;
+
+            case 's':
+                if (optarg && optarg[0]) {
+                    sep = optarg[0];
+                } else {
+                    usage(1);
                 }
                 break;
 
@@ -347,20 +662,16 @@ int main(int argc, char **argv) {
                         threads = new_threads;
                     }
                 } else {
-                    usage();
+                    usage(1);
                 }
                 break;
 
-            case 'o':
+            case 'z':
                 if (optarg) {
-                    outFile = optarg;
+                    complement = optarg;
                 } else {
-                    usage();
+                    usage(1);
                 }
-                break;
-
-            case 'h':
-                usage();
                 break;
 
             case '?':
@@ -368,7 +679,7 @@ int main(int argc, char **argv) {
                 break;
 
             default:
-                usage();
+                usage(1);
         }
     }
 
@@ -382,23 +693,31 @@ int main(int argc, char **argv) {
     string fullChunkName;
     string fullTokenizedChunkName;
     string header;
+    map<string, int> index;
     ifstream fileStream;
     fileStream.open(fullFilePath.c_str(), ios::in | ios::binary);
+
+    if (build_index_flag && (indexFile == "")) {
+        indexFile = dirname(&outFile[0]);
+        indexFile.append("/index.tsv");
+    }
 
     int lines = 0;
     if (fileStream.is_open()) {
         string line;
-        getline(fileStream, header);
+        if (header_flag) {
+            getline(fileStream, header);
+        }
         while (getline(fileStream, line)) {
             lines++;
         }
         fileStream.close();
     }
 
-    if (!quiet_flag) {
+    if (verbose_flag) {
         char resolved_path[PATH_MAX];
-        cout << "The file '" << realpath(&fullFilePath[0], resolved_path) << "' has " << lines << " lines.\n";
-        cout << "There are " << threads << " out of " << MAX_THREADS << " threads in use.\n";
+        cout << "The file '" << realpath(&fullFilePath[0], resolved_path) << "' has " << lines << " lines." << endl;
+        cout << "There are " << threads << " out of " << MAX_THREADS << " threads in use." << endl << endl;
     }
 
     int chunkSize = ceil((float)lines / threads);
@@ -409,46 +728,44 @@ int main(int argc, char **argv) {
 
     chunkFile(fullFilePath, chunkName, chunkSize);
 
-    fileTokenizer tokenizer(k, stride, alphabet, complement, delim);
-    vector<thread> threadList;
+    fileTokenizer tokenizer(k, stride, alphabet, complement, column, delim, sep);
+    doThreading(tokenizer, chunkName, threads, "Tokenizing complete!");
 
-    for (int i=0;i<threads;i++) {
-        fullChunkName.clear();
-        fullChunkName.append(chunkName);
-        fullChunkName.append(".");
-        fullChunkName.append(to_string(i + 1));
-        // cout << fullChunkName << endl;
-        threadList.push_back(thread(tokenizer, fullChunkName));
-        // threadList.push_back(thread(tokenizeFile, fullChunkName, 5, 1, "ACGTNBDHU", "TGCANUHDB", " "));
-    }
-    for (auto& th : threadList) {
-        th.join();
-    }
-    if (!quiet_flag) {
-        cout << endl << "Tokenizing complete!" << endl;
-    }
-
-    for (int i=0;i<threads;i++) {
-        fullChunkName.clear();
-        fullChunkName.append(chunkName);
-        fullChunkName.append(".");
-        fullChunkName.append(to_string(i + 1));
-        if (remove(fullChunkName.c_str()) != 0) {
-            cerr << "Error: Could not remove intermediate file '" << fullChunkName << "'.";
+    removeTmpfiles(chunkName, threads);
+    
+    if (build_index_flag) {
+        freqPopulator populator(column, delim, sep);
+        vector<map<string,int>> freqs(threads);
+        doThreading(populator, freqs, chunkName, threads, "Counting complete!", "corpus");
+        map<string,int> freq;
+        for (map<string,int> f : freqs) {
+            for (auto itr = f.begin(); itr != f.end(); ++itr) {
+                if (freq.find(itr->first) == freq.end()) {
+                    freq[itr->first] = itr->second;
+                } else {
+                    freq[itr->first] += itr->second;
+                }
+            }
         }
+        index = buildIndex(indexFile, freq, delim);
     }
 
-    joinFile(chunkName, outFile, header);
+    string joinExt = "corpus";
 
-    for (int i=0;i<threads;i++) {
-        fullTokenizedChunkName.clear();
-        fullTokenizedChunkName.append(chunkName);
-        fullTokenizedChunkName.append(".");
-        fullTokenizedChunkName.append(to_string(i + 1));
-        fullTokenizedChunkName.append(".corpus");
-        if (remove(fullTokenizedChunkName.c_str()) != 0) {
-            cerr << "Error: Could not remove intermediate file '" << fullTokenizedChunkName << "'.";
+    if (indexFile != "") {
+        if (!build_index_flag) {
+            index = readIndex(indexFile, delim);
         }
+        fileIndexer indexer(index, column, delim, sep);
+        doThreading(indexer, chunkName, threads, "Indexing complete!", "corpus");
+        joinExt.append(".index");
+    }
+
+    joinFile(chunkName, outFile, header, column, delim, joinExt);
+
+    removeTmpfiles(chunkName, threads, "corpus");
+    if (indexFile != "") {
+        removeTmpfiles(chunkName, threads, "corpus.index");
     }
 
     if (rmdir(tmp_dir.c_str())) {
