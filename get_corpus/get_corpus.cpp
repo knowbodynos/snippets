@@ -18,6 +18,7 @@
 using namespace std;
 
 static int build_index_flag = 0;
+static int index_only_flag = 0;
 static int header_flag = 1;
 static int verbose_flag = 1;
 static int rcomp_flag = 1;
@@ -561,6 +562,7 @@ int main(int argc, char **argv) {
         static struct option long_options[] = {
             /* These options set a flag. */
             {"build-index", no_argument, &build_index_flag, 1},
+            {"index-only", no_argument, &index_only_flag, 1},
             {"no-header", no_argument, &header_flag, 0},
             {"quiet", no_argument, &verbose_flag, 0},
             // Match rcomp as well
@@ -750,18 +752,20 @@ int main(int argc, char **argv) {
         index = buildIndex(indexFile, freq, delim);
     }
 
-    string joinExt = "corpus";
+    if (!index_only_flag) {
+        string joinExt = "corpus";
 
-    if (indexFile != "") {
-        if (!build_index_flag) {
-            index = readIndex(indexFile, delim);
+        if (indexFile != "") {
+            if (!build_index_flag) {
+                index = readIndex(indexFile, delim);
+            }
+            fileIndexer indexer(index, column, delim, sep);
+            doThreading(indexer, chunkName, threads, "Indexing complete!", "corpus");
+            joinExt.append(".index");
         }
-        fileIndexer indexer(index, column, delim, sep);
-        doThreading(indexer, chunkName, threads, "Indexing complete!", "corpus");
-        joinExt.append(".index");
-    }
 
-    joinFile(chunkName, outFile, header, column, delim, joinExt);
+        joinFile(chunkName, outFile, header, column, delim, joinExt);
+    }
 
     removeTmpfiles(chunkName, threads, "corpus");
     if (indexFile != "") {
