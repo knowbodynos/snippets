@@ -1,1 +1,2 @@
-# helpers
+# snippets
+Various code snippets
